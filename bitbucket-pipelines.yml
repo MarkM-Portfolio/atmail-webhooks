@@ -1,0 +1,252 @@
+image:
+  name: 281892538870.dkr.ecr.us-east-1.amazonaws.com/atmailtech/atmail-build-agent:latest
+  aws:
+    access-key: $AWS_ACCESS_KEY_ID
+    secret-key: $AWS_SECRET_ACCESS_KEY
+
+options:
+  docker: true
+  max-time: 10
+
+definitions:
+  services:
+    docker:
+      memory: 2048
+
+  steps:
+    - step: &DOCKER-IMAGE-AMD64
+        name: Building 'atmail-webhooks' (AMD64)
+        services:
+          - docker
+        runtime:
+          arch: x86
+        script:
+          - source env.inc
+          - export ARCH_TYPE=amd64
+          - export TARGET_ARCH=linux/$ARCH_TYPE
+          - export TARGET_IMG=atmail-webhooks$([ "$ENV" = "dev" ] && echo "-dev")-image
+          - export HTTPS_ENABLED=$([ "$ENV" = "dev" ] && echo "false" || echo "true")
+          - export DOCKER_BUILDKIT=1
+          - echo "Version:" $VERSION
+          - echo "Architecture Type:" $ARCH_TYPE
+          - echo "Target Arch:" $TARGET_ARCH
+          - echo "Target Image:" $TARGET_IMG
+          - echo "Docker Repository:" $DOCKER_REPOSITORY
+          - echo "HTTPS Enabled:" $HTTPS_ENABLED
+          - echo "Docker Port:" $DOCKER_PORT
+          - echo "Local Port:" $LOCAL_PORT
+          - echo "Building atmail-webhooks ($(echo $ENV | tr '[:lower:]' '[:upper:]')) - $ARCH_TYPE..."
+          - source bitbucket-ssh.sh
+          - aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${DOCKER_REGISTRY}
+          # - docker build --no-cache -f Dockerfile --pull --build-arg TARGET_ARCH=${TARGET_ARCH} --build-arg HTTPS_ENABLED=$HTTPS_ENABLED --build-arg LOCAL_PORT=$LOCAL_PORT --build-arg DOCKER_PORT=$DOCKER_PORT . -t ${DOCKER_REPOSITORY}/atmail-webhooks:$VERSION-$ARCH_TYPE --target ${TARGET_IMG} --ssh=default
+          - docker build --no-cache -f Dockerfile --pull --build-arg TARGET_ARCH=${TARGET_ARCH} --build-arg HTTPS_ENABLED=$HTTPS_ENABLED --build-arg LOCAL_PORT=$LOCAL_PORT --build-arg DOCKER_PORT=$DOCKER_PORT . -t ${DOCKER_REPOSITORY}/atmail-webhooks:$VERSION-$ARCH_TYPE --target atmail-webhooks-image --ssh=default
+          - docker tag ${DOCKER_REPOSITORY}/atmail-webhooks:$VERSION-$ARCH_TYPE ${DOCKER_REPOSITORY}/atmail-webhooks:$VERSION-$ARCH_TYPE-$ENV
+          - docker push --all-tags ${DOCKER_REPOSITORY}/atmail-webhooks
+
+    - step: &DOCKER-IMAGE-ARM64
+        name: Building 'atmail-webhooks' (ARM64)
+        services:
+          - docker
+        runtime:
+          arch: arm
+        script:
+          - source env.inc
+          - export ARCH_TYPE=arm64
+          - export TARGET_ARCH=linux/$ARCH_TYPE
+          - export TARGET_IMG=atmail-webhooks$([ "$ENV" = "dev" ] && echo "-dev")-image
+          - export HTTPS_ENABLED=$([ "$ENV" = "dev" ] && echo "false" || echo "true")
+          - export DOCKER_BUILDKIT=1
+          - echo "Version:" $VERSION
+          - echo "Architecture Type:" $ARCH_TYPE
+          - echo "Target Arch:" $TARGET_ARCH
+          - echo "Target Image:" $TARGET_IMG
+          - echo "Docker Repository:" $DOCKER_REPOSITORY
+          - echo "HTTPS Enabled:" $HTTPS_ENABLED
+          - echo "Docker Port:" $DOCKER_PORT
+          - echo "Local Port:" $LOCAL_PORT
+          - echo "Building atmail-webhooks ($(echo $ENV | tr '[:lower:]' '[:upper:]')) - $ARCH_TYPE..."
+          - source bitbucket-ssh.sh
+          - aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${DOCKER_REGISTRY}
+          # - docker build --no-cache -f Dockerfile --pull --build-arg TARGET_ARCH=${TARGET_ARCH} --build-arg HTTPS_ENABLED=$HTTPS_ENABLED --build-arg LOCAL_PORT=$LOCAL_PORT --build-arg DOCKER_PORT=$DOCKER_PORT . -t ${DOCKER_REPOSITORY}/atmail-webhooks:$VERSION-$ARCH_TYPE --target ${TARGET_IMG} --ssh=default
+          - docker build --no-cache -f Dockerfile --pull --build-arg TARGET_ARCH=${TARGET_ARCH} --build-arg HTTPS_ENABLED=$HTTPS_ENABLED --build-arg LOCAL_PORT=$LOCAL_PORT --build-arg DOCKER_PORT=$DOCKER_PORT . -t ${DOCKER_REPOSITORY}/atmail-webhooks:$VERSION-$ARCH_TYPE --target atmail-webhooks-image --ssh=default
+          - docker tag ${DOCKER_REPOSITORY}/atmail-webhooks:$VERSION-$ARCH_TYPE ${DOCKER_REPOSITORY}/atmail-webhooks:$VERSION-$ARCH_TYPE-$ENV
+          - docker push --all-tags ${DOCKER_REPOSITORY}/atmail-webhooks
+
+    - step: &SNYK
+        name: Run Snyk
+        image:
+          name: 281892538870.dkr.ecr.us-east-1.amazonaws.com/atmailtech/security-snyk:latest
+          aws:
+            access-key: $AWS_ACCESS_KEY_ID
+            secret-key: $AWS_SECRET_ACCESS_KEY
+        script:
+          - ./ci/bitbucket-git-setup.sh
+          - pip3 install -r requirements.txt
+          - snyk test --policy-path=/root/.snyk --severity-threshold=high --file=requirements.txt --command=python3
+
+    - step: &TEST-CONTAINER-AMD64
+        name: Testing 'atmail-webhooks' (AMD64)
+        runtime:
+          arch: x86
+        script:
+          - ls /usr/local/bin
+          - source env.inc
+          - export ARCH_TYPE=amd64
+          - echo "HTTPS Enabled:" $HTTPS_ENABLED
+          - echo "Testing atmail-webhooks ($(echo $ENV | tr '[:lower:]' '[:upper:]')) - $ARCH_TYPE..."
+          - source bitbucket-ssh.sh
+          - aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${DOCKER_REGISTRY}
+          # - docker pull ${DOCKER_REPOSITORY}/atmail-webhooks:$VERSION-$ARCH_TYPE
+          - docker pull ${DOCKER_REPOSITORY}/atmail-webhooks:$VERSION-$ARCH_TYPE-$ENV
+          - REGION=$(eval echo \$AWS_REGION_PC5$([ "$ENV" != "prod" ] && echo "_STG"))
+          - ACCESS_KEY_ID=$(eval echo \$AWS_ACCESS_KEY_ID_PC5$([ "$ENV" != "prod" ] && echo "_STG"))
+          - SECRET_ACCESS_KEY=$(eval echo \$AWS_SECRET_ACCESS_KEY_PC5$([ "$ENV" != "prod" ] && echo "_STG"))
+          - SESSION_TOKEN=$(eval echo \$AWS_SESSION_TOKEN_PC5$([ "$ENV" != "prod" ] && echo "_STG"))
+          # - docker run --name atmail-webhooks-$ENV-$ARCH_TYPE -e AWS_REGION=$REGION -e AWS_ACCESS_KEY_ID=$ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY=$SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN=$SESSION_TOKEN -e HTTPS_ENABLED=$HTTPS_ENABLED -e LOCAL_PORT=$LOCAL_PORT -e DOCKER_PORT=$DOCKER_PORT -p $LOCAL_PORT:$DOCKER_PORT -d ${DOCKER_REPOSITORY}/atmail-webhooks:$VERSION-$ARCH_TYPE
+          - docker run --name atmail-webhooks-$ENV-$ARCH_TYPE -e AWS_REGION=$REGION -e AWS_ACCESS_KEY_ID=$ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY=$SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN=$SESSION_TOKEN -e HTTPS_ENABLED=$HTTPS_ENABLED -e LOCAL_PORT=$LOCAL_PORT -e DOCKER_PORT=$DOCKER_PORT -p $LOCAL_PORT:$DOCKER_PORT -d ${DOCKER_REPOSITORY}/atmail-webhooks:$VERSION-$ARCH_TYPE-$ENV
+          - echo Wait for docker container to start... && sleep 5
+          - docker exec atmail-webhooks-$ENV-$ARCH_TYPE ./webhooks.sh --test
+          - docker stop atmail-webhooks-$ENV-$ARCH_TYPE
+          - docker rm atmail-webhooks-$ENV-$ARCH_TYPE
+
+    - step: &TEST-CONTAINER-ARM64
+        name: Testing 'atmail-webhooks' (ARM64)
+        runtime:
+          arch: arm
+        script:
+          - source env.inc
+          - export ARCH_TYPE=arm64
+          - echo "HTTPS Enabled:" $HTTPS_ENABLED
+          - echo "Testing atmail-webhooks ($(echo $ENV | tr '[:lower:]' '[:upper:]')) - $ARCH_TYPE..."
+          - source bitbucket-ssh.sh
+          - aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${DOCKER_REGISTRY}
+          # - docker pull ${DOCKER_REPOSITORY}/atmail-webhooks:$VERSION-$ARCH_TYPE
+          - docker pull ${DOCKER_REPOSITORY}/atmail-webhooks:$VERSION-$ARCH_TYPE-$ENV
+          - REGION=$(eval echo \$AWS_REGION_PC5$([ "$ENV" != "prod" ] && echo "_STG"))
+          - ACCESS_KEY_ID=$(eval echo \$AWS_ACCESS_KEY_ID_PC5$([ "$ENV" != "prod" ] && echo "_STG"))
+          - SECRET_ACCESS_KEY=$(eval echo \$AWS_SECRET_ACCESS_KEY_PC5$([ "$ENV" != "prod" ] && echo "_STG"))
+          - SESSION_TOKEN=$(eval echo \$AWS_SESSION_TOKEN_PC5$([ "$ENV" != "prod" ] && echo "_STG"))
+          # - docker run --name atmail-webhooks-$ENV-$ARCH_TYPE -e AWS_REGION=$REGION -e AWS_ACCESS_KEY_ID=$ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY=$SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN=$SESSION_TOKEN -e HTTPS_ENABLED=$HTTPS_ENABLED -e LOCAL_PORT=$LOCAL_PORT -e DOCKER_PORT=$DOCKER_PORT -p $LOCAL_PORT:$DOCKER_PORT -d ${DOCKER_REPOSITORY}/atmail-webhooks:$VERSION-$ARCH_TYPE
+          - docker run --name atmail-webhooks-$ENV-$ARCH_TYPE -e AWS_REGION=$REGION -e AWS_ACCESS_KEY_ID=$ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY=$SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN=$SESSION_TOKEN -e HTTPS_ENABLED=$HTTPS_ENABLED -e LOCAL_PORT=$LOCAL_PORT -e DOCKER_PORT=$DOCKER_PORT -p $LOCAL_PORT:$DOCKER_PORT -d ${DOCKER_REPOSITORY}/atmail-webhooks:$VERSION-$ARCH_TYPE-$ENV
+          - echo Wait for docker container to start... && sleep 5
+          - docker exec atmail-webhooks-$ENV-$ARCH_TYPE ./webhooks.sh --test
+          - docker stop atmail-webhooks-$ENV-$ARCH_TYPE
+          - docker rm atmail-webhooks-$ENV-$ARCH_TYPE
+
+pipelines:
+  custom:
+    build:
+      - step:
+          name: Set Tags / Environment Variables
+          artifacts:
+            download: false
+            paths:
+              - env.inc
+          script:
+            - source bitbucket-ssh.sh
+            - export ENV=dev
+            - echo "export ENV=${ENV}" > env.inc
+            - echo "export LOG_LEVEL=debug" >> env.inc
+            - echo "export VERSION=$(git rev-parse HEAD)" >> env.inc
+            - echo "export DOCKER_REPOSITORY=${DOCKER_REGISTRY}/${ENV}" >> env.inc
+            - echo "export HTTPS_ENABLED=false" >> env.inc
+            - echo "export DOCKER_PORT=8080" >> env.inc
+            - echo "export LOCAL_PORT=4444" >> env.inc
+
+      - parallel:
+        - step: *DOCKER-IMAGE-AMD64
+        - step: *DOCKER-IMAGE-ARM64
+
+      - parallel:
+        - step: *TEST-CONTAINER-AMD64
+        - step: *TEST-CONTAINER-ARM64
+
+    pull-requests:
+      - parallel:
+        - step:
+            name: Set Tags / Environment Variables
+            artifacts:
+              download: false
+              paths:
+                - env.inc
+            script:
+              - source bitbucket-ssh.sh
+              - export ENV=dev
+              - echo "export ENV=${ENV}" > env.inc
+              - echo "export LOG_LEVEL=debug" >> env.inc
+              - echo "export VERSION=$(git rev-parse HEAD)" >> env.inc
+              - echo "export DOCKER_REPOSITORY=${DOCKER_REGISTRY}/${ENV}" >> env.inc
+              - echo "export HTTPS_ENABLED=false" >> env.inc
+              - echo "export DOCKER_PORT=8080" >> env.inc
+              - echo "export LOCAL_PORT=4444" >> env.inc
+
+        - step: *SNYK
+
+      - parallel:
+        - step: *DOCKER-IMAGE-AMD64
+        - step: *DOCKER-IMAGE-ARM64
+      
+      - parallel:
+        - step: *TEST-CONTAINER-AMD64
+        - step: *TEST-CONTAINER-ARM64
+
+  tags:
+    "v*-rc*":
+      - parallel:
+        - step:
+            name: Deploy Release to Staging Repository
+            clone:
+              enabled: false
+            artifacts:
+              download: false
+              paths:
+                - env.inc
+            script:
+              - check-stg-tag.sh
+              - export ENV=stg
+              - echo "export ENV=${ENV}" > env.inc
+              - echo "export VERSION=${BITBUCKET_TAG}" >> env.inc
+              - echo "export DOCKER_REPOSITORY=${DOCKER_REGISTRY}/${ENV}" >> env.inc
+              - echo "export HTTPS_ENABLED=true" >> env.inc
+              - echo "export DOCKER_PORT=8080" >> env.inc
+              - echo "export LOCAL_PORT=4444" >> env.inc
+
+        - step: *SNYK
+
+      - parallel:
+        - step: *DOCKER-IMAGE-AMD64
+        - step: *DOCKER-IMAGE-ARM64
+
+      - parallel:
+        - step: *TEST-CONTAINER-AMD64
+        - step: *TEST-CONTAINER-ARM64
+
+    v*:
+      - parallel:
+        - step:
+            name: Deploy Release to Production Repository
+            clone:
+              enabled: false
+            artifacts:
+              download: false
+              paths:
+                - env.inc
+            script:
+              - check-prod-tag.sh
+              - export ENV=prod
+              - echo "export ENV=${ENV}" > env.inc
+              - echo "export VERSION=${BITBUCKET_TAG}" >> env.inc
+              - echo "export DOCKER_REPOSITORY=${DOCKER_REGISTRY}/${ENV}" >> env.inc
+              - echo "export HTTPS_ENABLED=true" >> env.inc
+              - echo "export DOCKER_PORT=9090" >> env.inc
+              - echo "export LOCAL_PORT=5555" >> env.inc
+
+        - step: *SNYK
+            
+      - parallel:
+        - step: *DOCKER-IMAGE-AMD64
+        - step: *DOCKER-IMAGE-ARM64
+
+      - parallel:
+        - step: *TEST-CONTAINER-AMD64
+        - step: *TEST-CONTAINER-ARM64

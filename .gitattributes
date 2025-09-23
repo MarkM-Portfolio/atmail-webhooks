@@ -1,0 +1,12 @@
+*.dockerignore linguist-language=Docker linguist-vendored=false
+*.gitattributes linguist-language=Git linguist-vendored=false
+*.gitignore linguist-language=Git linguist-vendored=false
+*.json linguist-language=JSON linguist-vendored=false
+*.md linguist-language=Markdown linguist-vendored=false
+*.py linguist-language=Python linguist-vendored=false
+*.pyc linguist-language=Pyc linguist-vendored=false
+*.sh linguist-language=Bash linguist-vendored=false
+*.tag linguist-language=Tag linguist-vendored=false
+*.txt linguist-language=Text File linguist-vendored=false
+*.yml linguist-language=YAML linguist-vendored=false
+Dockerfile linguist-language=Docker linguist-vendored=false
